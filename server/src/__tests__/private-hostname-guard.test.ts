@@ -42,6 +42,18 @@ describe("privateHostnameGuard", () => {
     expect(res.status).toBe(200);
   });
 
+  it("automatically allows Tailscale MagicDNS hostnames (*.ts.net)", async () => {
+    const app = createApp({ enabled: true });
+    const res = await request(app).get("/api/health").set("Host", "tetsuo.tail0ddb51.ts.net:3100");
+    expect(res.status).toBe(200);
+  });
+
+  it("automatically allows Tailscale CGNAT IP hostnames (100.64.0.0/10)", async () => {
+    const app = createApp({ enabled: true });
+    const res = await request(app).get("/api/health").set("Host", "100.101.102.103:3100");
+    expect(res.status).toBe(200);
+  });
+
   it("blocks unknown hostnames with a static remediation command", async () => {
     const app = createApp({ enabled: true, allowedHostnames: ["some-other-host"] });
     const res = await request(app).get("/api/health").set("Host", `${unknownHostname}:3100`);

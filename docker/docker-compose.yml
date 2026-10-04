@@ -30,7 +30,7 @@ services:
     # the whole host of pids.
     pids_limit: 2048
     ports:
-      - "3100:3100"
+      - "${PAPERCLIP_BIND_IP:-127.0.0.1}:3100:3100"
     environment:
       DATABASE_URL: postgres://paperclip:paperclip@db:5432/paperclip
       PORT: "3100"

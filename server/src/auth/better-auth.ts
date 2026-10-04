@@ -195,6 +195,13 @@ export function deriveAuthTrustedOrigins(config: Config, opts?: { listenPort?: n
   if (config.deploymentMode === "authenticated") {
     const port = opts?.listenPort ?? config.port;
     const needsPortVariants = port !== 80 && port !== 443;
+    // Automatically trust Tailscale domains
+    trustedOrigins.add("https://*.ts.net");
+    trustedOrigins.add("http://*.ts.net");
+    if (needsPortVariants) {
+      trustedOrigins.add(`https://*.ts.net:${port}`);
+      trustedOrigins.add(`http://*.ts.net:${port}`);
+    }
     for (const hostname of config.allowedHostnames) {
       const trimmed = hostname.trim().toLowerCase();
       if (!trimmed) continue;

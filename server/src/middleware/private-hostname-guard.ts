@@ -53,6 +53,39 @@ const BLOCKED_HOSTNAME_MESSAGE =
   "This hostname is not allowed for this Paperclip instance. " +
   "If you want to allow a hostname, run npx paperclipai allowed-hostname <host>.";
 
+export function isTailscaleHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  if (normalized.endsWith(".ts.net") || normalized === "ts.net") {
+    return true;
+  }
+  // Tailscale IPv4 CGNAT range: 100.64.0.0/10 (100.64.0.0 – 100.127.255.255)
+  const parts = normalized.split(".");
+  if (parts.length === 4 && parts.every((p) => /^\d+$/.test(p))) {
+    const p0 = Number(parts[0]);
+    const p1 = Number(parts[1]);
+    if (p0 === 100 && p1 >= 64 && p1 <= 127) {
+      return true;
+    }
+  }
+  // Tailscale IPv6 ULA range: fd7a:115c:a1e0::/48
+  if (normalized.startsWith("fd7a:115c:a1e0:")) {
+    return true;
+  }
+  return false;
+}
+
+function isAllowedHostname(hostname: string, allowSet: Set<string>): boolean {
+  if (isLoopbackHostname(hostname) || isTailscaleHostname(hostname) || allowSet.has(hostname)) {
+    return true;
+  }
+  for (const allowed of allowSet) {
+    if (allowed.startsWith("*.") && hostname.endsWith(allowed.slice(1))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function privateHostnameGuard(opts: {
   enabled: boolean;
   allowedHostnames: string[];
@@ -81,7 +114,7 @@ export function privateHostnameGuard(opts: {
       return;
     }
 
-    if (isLoopbackHostname(hostname) || allowSet.has(hostname)) {
+    if (isAllowedHostname(hostname, allowSet)) {
       next();
       return;
     }

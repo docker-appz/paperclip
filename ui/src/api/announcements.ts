@@ -1,8 +1,8 @@
 import { announcementSchema, type Announcement } from "@paperclipai/shared";
-import { ApiError } from "./client";
+import { ApiError, getApiBase } from "./client";
 
 async function request(path: string, init: RequestInit) {
-  const response = await fetch(`/api/announcements/${path}`, {
+  const response = await fetch(`${getApiBase()}/announcements/${path}`, {
     credentials: "same-origin", cache: "no-store", ...init,
   });
   if (!response.ok) throw new ApiError("Announcement request failed", response.status, null);

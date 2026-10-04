@@ -508,8 +508,11 @@ export async function createApp(
   app.locals.paperclipDb = db;
 
   // Support running under a subpath like /paperclip (e.g. Tailscale serve or reverse proxy)
-  app.use((req, _res, next) => {
-    if (req.url === "/paperclip" || req.url.startsWith("/paperclip/") || req.url.startsWith("/paperclip?")) {
+  app.use((req, res, next) => {
+    if (req.url === "/paperclip") {
+      return res.redirect(301, "/paperclip/");
+    }
+    if (req.url.startsWith("/paperclip/") || req.url.startsWith("/paperclip?")) {
       req.url = req.url.slice("/paperclip".length) || "/";
     }
     next();
@@ -991,15 +994,18 @@ export async function createApp(
       // Hashed asset files (Vite emits them under /assets/<name>.<hash>.<ext>)
       // never change once built, so they can be cached aggressively.
       app.use(
-        "/assets",
+        ["/assets", "/paperclip/assets"],
         express.static(path.join(uiDist, "assets"), {
           maxAge: "1y",
           immutable: true,
         }),
       );
       // Serve root/index through the same runtime HTML transform as SPA routes.
-      app.get(["/", "/index.html"], (req, res) => {
-        res.type("html").set("Cache-Control", "no-cache").send(readBrandedStaticIndexHtml(uiDist, req.originalUrl || req.url));
+      app.get(["/", "/index.html", "/paperclip", "/paperclip/", "/paperclip/index.html"], (req, res) => {
+        if (req.path === "/paperclip") {
+          return res.redirect(301, "/paperclip/");
+        }
+        res.type("html").set("Cache-Control", "no-cache").send(readBrandedStaticIndexHtml(uiDist, req));
       });
       // Non-hashed static files (favicon.ico, manifest, robots.txt, etc.):
       // short cache so operators who swap them out see the new version
@@ -1023,7 +1029,7 @@ export async function createApp(
       // instead. The index.html response itself is no-cache so a subsequent
       // deploy's updated asset hashes are picked up on next load.
       app.get(/.*/, (req, res) => {
-        if (req.path.startsWith("/assets/")) {
+        if (req.path.startsWith("/assets/") || req.path.startsWith("/paperclip/assets/")) {
           res.status(404).end();
           return;
         }
@@ -1031,7 +1037,7 @@ export async function createApp(
           .status(200)
           .set("Content-Type", "text/html")
           .set("Cache-Control", "no-cache")
-          .end(readBrandedStaticIndexHtml(uiDist, req.originalUrl || req.url));
+          .end(readBrandedStaticIndexHtml(uiDist, req));
       });
     } else {
       console.warn("[paperclip] UI dist not found; running in API-only mode");

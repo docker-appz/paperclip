@@ -10,7 +10,7 @@ import { readBrowserBuildCommit } from "./src/lib/vite-build-commit";
 const apiProxy = createApiProxy();
 
 export default defineConfig(({ mode }) => ({
-  base: process.env.VITE_BASE_PATH || "./",
+  base: process.env.VITE_BASE_PATH || "/paperclip/",
   define: {
     __PAPERCLIP_BUILD_COMMIT__: JSON.stringify(
       readBrowserBuildCommit(__dirname),

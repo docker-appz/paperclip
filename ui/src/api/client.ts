@@ -2,7 +2,19 @@ import { getPageVisibility, getVisibilityHeaderValue } from "@/lib/page-visibili
 import { tenantSessionRecovery } from "@/lib/tenant-session-recovery";
 import { readApiJson } from "./response";
 
-const BASE = "/api";
+export function getApiBase(): string {
+  if (typeof window !== "undefined") {
+    if ((window as any).__PAPERCLIP_API_BASE__) {
+      return (window as any).__PAPERCLIP_API_BASE__;
+    }
+    if (window.location.pathname === "/paperclip" || window.location.pathname.startsWith("/paperclip/")) {
+      return "/paperclip/api";
+    }
+  }
+  return "/api";
+}
+
+const BASE = getApiBase();
 
 export class ApiError extends Error {
   status: number;
@@ -51,7 +63,7 @@ export async function requestResponse(path: string, init?: RequestInit): Promise
   }
   applyObservabilityHeaders(headers);
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     credentials: "include",
     ...init,
     headers,

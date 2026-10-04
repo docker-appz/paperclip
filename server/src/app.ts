@@ -506,6 +506,14 @@ export async function createApp(
 ) {
   const app = express();
   app.locals.paperclipDb = db;
+
+  // Support running under a subpath like /paperclip (e.g. Tailscale serve or reverse proxy)
+  app.use((req, _res, next) => {
+    if (req.url === "/paperclip" || req.url.startsWith("/paperclip/") || req.url.startsWith("/paperclip?")) {
+      req.url = req.url.slice("/paperclip".length) || "/";
+    }
+    next();
+  });
   const captureRawBody = (
     req: express.Request,
     _res: express.Response,
@@ -990,8 +998,8 @@ export async function createApp(
         }),
       );
       // Serve root/index through the same runtime HTML transform as SPA routes.
-      app.get(["/", "/index.html"], (_req, res) => {
-        res.type("html").set("Cache-Control", "no-cache").send(readBrandedStaticIndexHtml(uiDist));
+      app.get(["/", "/index.html"], (req, res) => {
+        res.type("html").set("Cache-Control", "no-cache").send(readBrandedStaticIndexHtml(uiDist, req.originalUrl || req.url));
       });
       // Non-hashed static files (favicon.ico, manifest, robots.txt, etc.):
       // short cache so operators who swap them out see the new version
@@ -1023,7 +1031,7 @@ export async function createApp(
           .status(200)
           .set("Content-Type", "text/html")
           .set("Cache-Control", "no-cache")
-          .end(readBrandedStaticIndexHtml(uiDist));
+          .end(readBrandedStaticIndexHtml(uiDist, req.originalUrl || req.url));
       });
     } else {
       console.warn("[paperclip] UI dist not found; running in API-only mode");

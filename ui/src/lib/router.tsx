@@ -57,6 +57,23 @@ export function useCaseHref(): (...segments: string[]) => string {
 
 export * from "react-router-dom";
 
+function detectBasename(): string | undefined {
+  if (typeof window !== "undefined") {
+    if ((window as any).__PAPERCLIP_BASE_PATH__) {
+      return (window as any).__PAPERCLIP_BASE_PATH__;
+    }
+    if (window.location.pathname === "/paperclip" || window.location.pathname.startsWith("/paperclip/")) {
+      return "/paperclip";
+    }
+  }
+  return undefined;
+}
+
+export function BrowserRouter({ children, ...props }: React.ComponentProps<typeof RouterDom.BrowserRouter>) {
+  const basename = props.basename ?? detectBasename();
+  return <RouterDom.BrowserRouter basename={basename} {...props}>{children}</RouterDom.BrowserRouter>;
+}
+
 type CompanyLinkProps = React.ComponentProps<typeof RouterDom.Link> & {
   disableIssueQuicklook?: boolean;
   issuePrefetch?: Issue | null;

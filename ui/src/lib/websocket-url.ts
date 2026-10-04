@@ -16,5 +16,6 @@ export function buildSameOriginWebSocketUrl(
 ): string {
   const protocol = location.protocol === "https:" ? "wss" : "ws";
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${protocol}://${browserReachableHost(location)}${normalizedPath}`;
+  const subpath = typeof window !== "undefined" && (window.location.pathname === "/paperclip" || window.location.pathname.startsWith("/paperclip/")) ? "/paperclip" : "";
+  return `${protocol}://${browserReachableHost(location)}${subpath}${normalizedPath}`;
 }

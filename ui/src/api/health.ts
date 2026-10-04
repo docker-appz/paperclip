@@ -1,6 +1,6 @@
 import type { ServerInfoSnapshot } from "@paperclipai/shared";
 import { tenantSessionRecovery } from "@/lib/tenant-session-recovery";
-import { ApiError } from "./client";
+import { ApiError, getApiBase } from "./client";
 import { ApiUnavailableError, readApiJson } from "./response";
 
 export type DevServerHealthStatus = {
@@ -51,7 +51,7 @@ export type HealthStatus = {
 
 export const healthApi = {
   get: async (): Promise<HealthStatus> => {
-    const res = await fetch("/api/health", {
+    const res = await fetch(`${getApiBase()}/health`, {
       credentials: "include",
       headers: { Accept: "application/json" },
       cache: "no-store",
@@ -67,7 +67,7 @@ export const healthApi = {
     return payload;
   },
   requestDevServerRestart: async (): Promise<void> => {
-    const res = await fetch("/api/health/dev-server/restart", {
+    const res = await fetch(`${getApiBase()}/health/dev-server/restart`, {
       method: "POST",
       credentials: "include",
       headers: { Accept: "application/json" },

@@ -74,6 +74,12 @@ if ! grep -q "^PAPERCLIP_ALLOWED_HOSTNAMES=" "$ENV_FILE" 2>/dev/null; then
   echo "==> Added PAPERCLIP_ALLOWED_HOSTNAMES to $ENV_FILE"
 fi
 
+# Ensure GITHUB_ACCESS_TOKEN exists in .env
+if ! grep -q "^GITHUB_ACCESS_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+  echo "GITHUB_ACCESS_TOKEN=" >> "$ENV_FILE"
+  echo "==> Added GITHUB_ACCESS_TOKEN to $ENV_FILE"
+fi
+
 # Update localhost:5432 to localhost:5434 in DATABASE_URL if present from .env.example
 if grep -q "^DATABASE_URL=postgres://paperclip:paperclip@localhost:5432/paperclip" "$ENV_FILE" 2>/dev/null; then
   awk 'BEGIN{FS=OFS="="} /^DATABASE_URL=/{gsub("localhost:5432", "localhost:5434")} {print}' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"

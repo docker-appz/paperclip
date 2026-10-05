@@ -246,8 +246,16 @@ export function resolveWorkspaceHandoffIdentity(
 }
 
 export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins: string[]): BetterAuthInstance {
-  const baseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
-  const publicUrl = process.env.PAPERCLIP_PUBLIC_URL?.trim() || baseUrl;
+  const rawBaseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
+  let baseUrl: string | undefined;
+  if (rawBaseUrl) {
+    try {
+      baseUrl = new URL(rawBaseUrl).origin;
+    } catch {
+      baseUrl = rawBaseUrl;
+    }
+  }
+  const publicUrl = process.env.PAPERCLIP_PUBLIC_URL?.trim() || rawBaseUrl;
   const managedRuntimePublicUrl = process.env.PAPERCLIP_MANAGED_RUNTIME_PUBLIC_URL?.trim() || undefined;
   const secret = process.env.BETTER_AUTH_SECRET ?? process.env.PAPERCLIP_AGENT_JWT_SECRET;
   if (!secret) {
@@ -363,6 +371,9 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins:
 export function createBetterAuthHandler(auth: BetterAuthHandlerTarget): RequestHandler {
   const handler = toNodeHandler(auth);
   return (req, res, next) => {
+    if (req.url.startsWith("/paperclip/")) {
+      req.url = req.url.slice("/paperclip".length);
+    }
     void Promise.resolve(handler(req, res)).catch(next);
   };
 }

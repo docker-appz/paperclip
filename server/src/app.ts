@@ -527,8 +527,18 @@ export async function createApp(
 
   // Respect the operator's `TRUST_PROXY` env var (see middleware/trust-proxy.ts).
   // Default is unset → Express trusts nothing, which is the only safe choice
-  // when the server may be reachable without a known reverse proxy in front.
   applyTrustProxy(app, parseTrustProxyEnv(process.env.TRUST_PROXY));
+
+  // Support reverse proxy hosting under a subpath like /paperclip when the proxy forwards with the prefix intact
+  const configuredBasePath = process.env.PAPERCLIP_BASE_PATH?.trim().replace(/\/+$/, "") || "/paperclip";
+  if (configuredBasePath && configuredBasePath !== "") {
+    app.use((req, _res, next) => {
+      if (req.url.startsWith(`${configuredBasePath}/api/`) || req.url === `${configuredBasePath}/api`) {
+        req.url = req.url.slice(configuredBasePath.length);
+      }
+      next();
+    });
+  }
 
   app.use(
     COMPANY_IMPORT_API_PATH,

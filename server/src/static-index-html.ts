@@ -38,7 +38,7 @@ export function resolveBasePath(reqOrPath?: any): string {
       }
     } catch {}
   }
-  return "/paperclip";
+  return "";
 }
 
 export function readBrandedStaticIndexHtml(uiDist: string, reqOrPath?: any): string {

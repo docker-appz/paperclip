@@ -214,6 +214,7 @@ function adapterConfigHasAnthropicApiKey(config: Record<string, unknown>): boole
  */
 const MODEL_SOURCE_BRAND_MARKS: Record<string, string> = {
   claude_local: "/brands/claude-color.svg",
+  opencode_local: "/brands/apps/openrouter.svg",
 };
 
 
@@ -251,6 +252,7 @@ const MODEL_SOURCE_INLINE_MARKS: Record<string, ComponentType<{ className?: stri
 const API_KEY_ENV_KEYS: Record<string, string> = {
   claude_local: ANTHROPIC_API_KEY_ENV_KEY,
   codex_local: "OPENAI_API_KEY",
+  opencode_local: "OPENROUTER_API_KEY",
 };
 
 function apiKeyEnvKeyFor(adapterType: string): string {
@@ -2061,7 +2063,10 @@ function OnboardingWizardInner({
           return;
         }
         const discoveredModels = adapterModels ?? [];
-        if (!discoveredModels.some((entry) => entry.id === selectedModelId)) {
+        if (
+          !selectedModelId.startsWith("openrouter/") &&
+          !discoveredModels.some((entry) => entry.id === selectedModelId)
+        ) {
           setError(
             discoveredModels.length === 0
               ? "No OpenCode models discovered. Run `opencode models` and authenticate providers."
@@ -2691,7 +2696,7 @@ function OnboardingWizardInner({
                         autoConnectStartedRef.current = false;
                         setSourcePicked(true);
                         setAdapterType(id);
-                        if (id === "opencode_local") setModel(DEFAULT_OPENCODE_LOCAL_MODEL);
+                        if (id === "opencode_local") setModel("openrouter/auto");
                         else if (id !== "codex_local") setModel("");
                         setConnectPhase("collapsing");
                       }}

@@ -25,7 +25,7 @@ import {
   prepareAdapterExecutionTargetRuntime,
   overrideAdapterExecutionTargetRemoteCwd,
 } from "@paperclipai/adapter-utils/execution-target";
-import { discoverOpenCodeModels, ensureOpenCodeModelConfiguredAndAvailable } from "./models.js";
+import { discoverOpenCodeModels, ensureOpenCodeModelConfiguredAndAvailable, isTruthyEnvFlag } from "./models.js";
 import { parseOpenCodeJsonl } from "./parse.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 import { prepareOpenCodeRuntimeConfig, prepareManagedOpenCodeRemoteHomes } from "./runtime-config.js";
@@ -243,6 +243,17 @@ export async function testEnvironment(
             code: "opencode_models_discovered",
             level: "info",
             message: `Discovered ${discovered.length} model(s) from OpenCode providers.`,
+          });
+        } else if (
+          isTruthyEnvFlag(
+            runtimeEnv.OPENCODE_ALLOW_ALL_MODELS ?? process.env.OPENCODE_ALLOW_ALL_MODELS,
+          ) ||
+          configuredModel.startsWith("openrouter/")
+        ) {
+          checks.push({
+            code: "opencode_models_unlisted_allowed",
+            level: "info",
+            message: `Using configured model ${configuredModel} with OpenRouter/custom routing.`,
           });
         } else {
           checks.push({

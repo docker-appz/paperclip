@@ -113,9 +113,10 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     icon: Bot,
   },
   opencode_local: {
-    label: "OpenCode",
-    description: "OpenCode multi-provider harness",
+    label: "OpenRouter",
+    description: "OpenRouter multi-provider harness",
     icon: OpenCodeLogoIcon,
+    recommended: true,
   },
   pi_local: {
     label: "Pi",

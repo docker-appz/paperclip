@@ -41,6 +41,7 @@ services:
       PAPERCLIP_ALLOWED_HOSTNAMES: "${PAPERCLIP_ALLOWED_HOSTNAMES:-}"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
       PAPERCLIP_BASE_PATH: "${PAPERCLIP_BASE_PATH:-/paperclip}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
     volumes:
       - paperclip-data:/paperclip
     depends_on:

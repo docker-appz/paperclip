@@ -137,6 +137,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft,
   ArrowRight,
+  Bot,
   Check,
   Loader2,
   ChevronDown,

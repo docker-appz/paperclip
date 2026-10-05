@@ -10,6 +10,95 @@ type PreparedOpenCodeRuntimeConfig = {
   cleanup: () => Promise<void>;
 };
 
+export type OpenCodeRuntimeMcpServer = {
+  name: string;
+  url: string;
+  token: string;
+};
+
+function slugifyMcpServerName(value: string, fallback: string): string {
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || fallback
+  );
+}
+
+// Runtime MCP gateway URLs are minted against the server's configured public
+// base URL. Locally executed OpenCode runs share the server's network
+// namespace, where that public origin (for example a tailscale hostname) can
+// be unreachable while the server's own loopback listener always is. When the
+// exported listen port matches the gateway URL's port, rebase the origin onto
+// the loopback listener. An explicit PAPERCLIP_OPENCODE_MCP_API_BASE override
+// always wins; without a match the URL stays untouched so remote execution
+// targets keep using the public origin.
+function resolveRuntimeMcpUrl(
+  rawUrl: string,
+  readEnv: (name: string) => string | undefined,
+): string {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    return rawUrl;
+  }
+  const rebase = (origin: string): string => {
+    try {
+      return new URL(`${url.pathname}${url.search}${url.hash}`, origin).toString();
+    } catch {
+      return rawUrl;
+    }
+  };
+  const overrideBase = (readEnv("PAPERCLIP_OPENCODE_MCP_API_BASE") ?? "").trim();
+  if (overrideBase) return rebase(overrideBase);
+  const listenHost = (readEnv("PAPERCLIP_LISTEN_HOST") ?? "").trim();
+  const listenPort = (readEnv("PAPERCLIP_LISTEN_PORT") ?? "").trim();
+  if (!listenHost || !listenPort) return rawUrl;
+  if (url.port !== listenPort) return rawUrl;
+  if (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]") {
+    return rawUrl;
+  }
+  const host = listenHost === "0.0.0.0" ? "127.0.0.1" : listenHost === "::" ? "[::1]" : listenHost;
+  return rebase(`http://${host}:${listenPort}`);
+}
+
+function buildRuntimeMcpSection(
+  servers: OpenCodeRuntimeMcpServer[],
+  readEnv: (name: string) => string | undefined,
+  existingKeys: Set<string>,
+  notes: string[],
+): Record<string, Record<string, unknown>> | null {
+  if (servers.length === 0) return null;
+  const section: Record<string, Record<string, unknown>> = {};
+  const usedKeys = new Set(existingKeys);
+  for (const [index, server] of servers.entries()) {
+    const url = resolveRuntimeMcpUrl(server.url.trim(), readEnv);
+    const token = server.token.trim();
+    if (!url || !token) continue;
+    const base = slugifyMcpServerName(server.name, `paperclip-mcp-${index + 1}`);
+    let key = base;
+    let suffix = 2;
+    while (usedKeys.has(key)) {
+      key = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedKeys.add(key);
+    section[key] = {
+      type: "remote",
+      url,
+      headers: { Authorization: `Bearer ${token}` },
+      enabled: true,
+    };
+  }
+  const names = Object.keys(section);
+  if (names.length === 0) return null;
+  notes.push(`Mounted ${names.length} Paperclip runtime MCP server(s) into the OpenCode config: ${names.join(", ")}.`);
+  return section;
+}
+
 function resolveXdgConfigHome(env: Record<string, string>): string {
   return (
     (typeof env.XDG_CONFIG_HOME === "string" && env.XDG_CONFIG_HOME.trim()) ||
@@ -106,6 +195,7 @@ async function readJsonObject(filepath: string): Promise<Record<string, unknown>
 export async function prepareOpenCodeRuntimeConfig(input: {
   env: Record<string, string>;
   config: Record<string, unknown>;
+  runtimeMcpServers?: OpenCodeRuntimeMcpServer[];
   targetIsRemote?: boolean;
 }): Promise<PreparedOpenCodeRuntimeConfig> {
   const skipPermissions = asBoolean(input.config.dangerouslySkipPermissions, true);
@@ -252,7 +342,26 @@ export async function prepareOpenCodeRuntimeConfig(input: {
     nextConfig.small_model = small;
     notes.push(`Defaulted OpenCode small_model to ${small} for Z.AI.`);
   }
-  await fs.writeFile(runtimeConfigPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
+
+  // Mount Paperclip-governed runtime MCP gateways (tool connections such as a
+  // shared Chrome DevTools browser) as remote OpenCode MCP servers. The bearer
+  // tokens are run-scoped gateway tokens; the config file lives in a private
+  // temp dir and is written with owner-only permissions.
+  const resolveMcpEnv = (name: string): string | undefined => input.env[name] ?? process.env[name];
+  const existingMcp = isPlainObject(existingConfig.mcp) ? existingConfig.mcp : {};
+  const runtimeMcp = buildRuntimeMcpSection(
+    input.runtimeMcpServers ?? [],
+    resolveMcpEnv,
+    new Set(Object.keys(existingMcp)),
+    notes,
+  );
+  if (runtimeMcp) {
+    nextConfig.mcp = { ...existingMcp, ...runtimeMcp };
+  }
+  await fs.writeFile(runtimeConfigPath, `${JSON.stringify(nextConfig, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: 0o600,
+  });
 
   return {
     env: {

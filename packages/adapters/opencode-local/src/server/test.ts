@@ -248,12 +248,13 @@ export async function testEnvironment(
           isTruthyEnvFlag(
             runtimeEnv.OPENCODE_ALLOW_ALL_MODELS ?? process.env.OPENCODE_ALLOW_ALL_MODELS,
           ) ||
-          configuredModel.startsWith("openrouter/")
+          configuredModel.startsWith("openrouter/") ||
+          configuredModel.startsWith("zai/")
         ) {
           checks.push({
             code: "opencode_models_unlisted_allowed",
             level: "info",
-            message: `Using configured model ${configuredModel} with OpenRouter/custom routing.`,
+            message: `Using configured model ${configuredModel} with OpenRouter/Z.AI/custom routing.`,
           });
         } else {
           checks.push({

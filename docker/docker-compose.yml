@@ -42,6 +42,8 @@ services:
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
       PAPERCLIP_BASE_PATH: "${PAPERCLIP_BASE_PATH:-/paperclip}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      ZAI_API_KEY: "${ZAI_API_KEY:-}"
+      ZAI_BASE_URL: "${ZAI_BASE_URL:-https://api.z.ai/api/coding/paas/v4}"
     volumes:
       - paperclip-data:/paperclip
     depends_on:

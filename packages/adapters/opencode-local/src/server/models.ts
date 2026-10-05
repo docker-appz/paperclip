@@ -7,6 +7,7 @@ import {
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { isValidOpenCodeModelId } from "../index.js";
+import { fetchZaiModelsCached, DEFAULT_ZAI_BASE_URL } from "./zai.js";
 
 const MODELS_CACHE_TTL_MS = 60_000;
 const MODELS_DISCOVERY_TIMEOUT_MS = 20_000;
@@ -198,12 +199,30 @@ export async function discoverOpenCodeModels(
           : "`opencode models` failed.",
       );
     } else {
-      return sortModels(parseOpenCodeModelsOutput(result.stdout));
+      const baseModels = parseOpenCodeModelsOutput(result.stdout);
+      const zaiApiKey = runtimeEnv.ZAI_API_KEY ?? process.env.ZAI_API_KEY;
+      if (zaiApiKey || runtimeEnv.ZAI_BASE_URL || process.env.ZAI_BASE_URL) {
+        const zaiBaseUrl = (runtimeEnv.ZAI_BASE_URL ?? process.env.ZAI_BASE_URL ?? DEFAULT_ZAI_BASE_URL).trim();
+        const zaiModels = await fetchZaiModelsCached(zaiBaseUrl, zaiApiKey);
+        for (const modelId of zaiModels) {
+          baseModels.push({ id: `zai/${modelId}`, label: `Z.AI · ${modelId}` });
+        }
+      }
+      return sortModels(dedupeModels(baseModels));
     }
 
     const delayMs = MODELS_DISCOVERY_RETRY_DELAYS_MS[attempt - 1];
     if (delayMs === undefined) break;
     await sleep(delayMs);
+  }
+
+  const zaiApiKey = runtimeEnv.ZAI_API_KEY ?? process.env.ZAI_API_KEY;
+  if (zaiApiKey || runtimeEnv.ZAI_BASE_URL || process.env.ZAI_BASE_URL) {
+    const zaiBaseUrl = (runtimeEnv.ZAI_BASE_URL ?? process.env.ZAI_BASE_URL ?? DEFAULT_ZAI_BASE_URL).trim();
+    const zaiModels = await fetchZaiModelsCached(zaiBaseUrl, zaiApiKey);
+    if (zaiModels.length > 0) {
+      return sortModels(zaiModels.map((id) => ({ id: `zai/${id}`, label: `Z.AI · ${id}` })));
+    }
   }
 
   throw lastError ?? new Error("`opencode models` failed.");
@@ -281,7 +300,9 @@ export async function ensureOpenCodeModelConfiguredAndAvailable(input: {
   if (
     isTruthyEnvFlag(
       env.OPENCODE_ALLOW_ALL_MODELS ?? process.env.OPENCODE_ALLOW_ALL_MODELS,
-    )
+    ) ||
+    model.startsWith("openrouter/") ||
+    model.startsWith("zai/")
   ) {
     return [{ id: model, label: model }];
   }

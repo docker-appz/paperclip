@@ -237,8 +237,24 @@ function OpenAiBlossom({ className }: { className?: string }) {
   );
 }
 
+function ZaiLogo({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" aria-hidden>
+      <rect width="24" height="24" rx="4" fill="currentColor" fillOpacity="0.12" />
+      <path
+        d="M6 7.5H18L8.5 16.5H18"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const MODEL_SOURCE_INLINE_MARKS: Record<string, ComponentType<{ className?: string }>> = {
   codex_local: OpenAiBlossom,
+  zai: ZaiLogo,
 };
 
 /**
@@ -253,9 +269,13 @@ const API_KEY_ENV_KEYS: Record<string, string> = {
   claude_local: ANTHROPIC_API_KEY_ENV_KEY,
   codex_local: "OPENAI_API_KEY",
   opencode_local: "OPENROUTER_API_KEY",
+  zai: "ZAI_API_KEY",
 };
 
-function apiKeyEnvKeyFor(adapterType: string): string {
+function apiKeyEnvKeyFor(adapterType: string, selectedSource?: string, modelId?: string): string {
+  if (selectedSource === "zai" || (typeof modelId === "string" && modelId.startsWith("zai/"))) {
+    return "ZAI_API_KEY";
+  }
   return API_KEY_ENV_KEYS[adapterType] ?? "API_KEY";
 }
 
@@ -621,6 +641,13 @@ function OnboardingWizardInner({
    * whether the row has been *answered* on this visit.
    */
   const [sourcePicked, setSourcePicked] = useState(false);
+  const [selectedSourceId, setSelectedSourceId] = useState<string>(() =>
+    saved?.model && String(saved.model).startsWith("zai/")
+      ? "zai"
+      : saved?.adapterType
+        ? String(saved.adapterType)
+        : "",
+  );
   const savedNativeRunnerDraft = saved?.adapterType === "paperclip_runner";
   const [cwd, setCwd] = useState((saved?.cwd as string) ?? "");
   // Native drafts may carry provider-specific configuration that is invalid
@@ -698,7 +725,7 @@ function OnboardingWizardInner({
   );
   const savedKeys = useSavedProviderKeys(
     createdCompanyId,
-    apiKeyEnvKeyFor(adapterType),
+    apiKeyEnvKeyFor(adapterType, selectedSourceId, model),
     effectiveOnboardingOpen && step === 4,
   );
   // The chooser is absent in onboarding. Prefer the user's explicit default;
@@ -706,13 +733,13 @@ function OnboardingWizardInner({
   const savedSubscription = savedKeys.subscriptions.find((option) => option.aiConnection?.mode === "responsible_user")
     ?? (savedKeys.subscriptions.length === 1 ? savedKeys.subscriptions[0] : undefined);
   const [selectedSavedKey, setSelectedSavedKey] = useState<{ companyId: string; envKey: string; id: string } | null>(null);
-  const selectedApiKeyId = selectedSavedKey?.companyId === createdCompanyId && selectedSavedKey?.envKey === apiKeyEnvKeyFor(adapterType)
+  const selectedApiKeyId = selectedSavedKey?.companyId === createdCompanyId && selectedSavedKey?.envKey === apiKeyEnvKeyFor(adapterType, selectedSourceId, model)
     ? selectedSavedKey.id
     : savedKeys.options[0]?.id;
   const selectedApiKey = savedKeys.options.find((option) => option.id === selectedApiKeyId);
   const credentialMode = credentialModeChoice ?? (
     (savedKeys.subscriptions.length > 0 || (adapterType === "claude_local" && savedKeys.storedLogin.data))
-      ? "subscription" : savedKeys.options.length || adapterType === "opencode_local" ? "api" : "subscription"
+      ? "subscription" : savedKeys.options.length || adapterType === "opencode_local" || selectedSourceId === "zai" ? "api" : "subscription"
   );
   const [createdCompanyPrefix, setCreatedCompanyPrefix] = useState<
     string | null
@@ -763,10 +790,10 @@ function OnboardingWizardInner({
    */
   const apiKeySecretRef = useRef<{ key: string; companyId: string; envKey: string; binding?: Awaited<ReturnType<typeof storeProviderApiKey>>["binding"]; aiConnection?: AiConnectionBinding } | null>(null);
   const managedSubscriptionRef = useRef<{ companyId: string; binding: AiConnectionBinding } | null>(null);
-  const managedProvider = aiProviderForAdapter(adapterType);
+  const managedProvider = selectedSourceId === "zai" ? undefined : aiProviderForAdapter(adapterType);
   function managedBindingForStep(): AiConnectionBinding | undefined {
     if (credentialMode === "api") return selectedApiKey?.aiConnection ?? (
-      !selectedApiKey && apiKeySecretRef.current?.companyId === createdCompanyId && apiKeySecretRef.current.envKey === apiKeyEnvKeyFor(adapterType)
+      !selectedApiKey && apiKeySecretRef.current?.companyId === createdCompanyId && apiKeySecretRef.current.envKey === apiKeyEnvKeyFor(adapterType, selectedSourceId, model)
         ? apiKeySecretRef.current.aiConnection : undefined);
     return savedSubscription?.aiConnection ?? (managedSubscriptionRef.current?.companyId === createdCompanyId && managedSubscriptionRef.current.binding.provider === managedProvider ? managedSubscriptionRef.current.binding : undefined);
   }
@@ -1156,7 +1183,7 @@ function OnboardingWizardInner({
    * no longer offers — a selection the customer cannot see.
    */
   const sourceSelected =
-    sourcePicked && recommendedAdapters.some((opt) => opt.type === adapterType);
+    sourcePicked && (selectedSourceId === "zai" || recommendedAdapters.some((opt) => opt.type === adapterType));
 
   /**
    * Whether the connect step may advance.
@@ -1367,7 +1394,7 @@ function OnboardingWizardInner({
    * rather than offering — see `FooterNav`, where the label cross-fades over an
    * easing width so those changes read as one control rather than four.
    */
-  const connectSourceLabel = CONNECT_SOURCE_NAMES[adapterType] ?? adapterType;
+  const connectSourceLabel = selectedSourceId === "zai" ? "Z.AI" : (CONNECT_SOURCE_NAMES[adapterType] ?? adapterType);
   const connectCta: { label: string; icon: FooterPrimaryIcon; disabled: boolean } =
     connectProgress
       ? { label: adapterEnvLoading ? "Testing…" : connectProgress, icon: "spinner", disabled: true }
@@ -1796,11 +1823,11 @@ function OnboardingWizardInner({
    */
   async function storeApiKeyUserSecret(companyId: string): Promise<boolean> {
     const key = apiKey.trim();
-    const envKey = apiKeyEnvKeyFor(adapterType);
+    const envKey = apiKeyEnvKeyFor(adapterType, selectedSourceId, model);
     if (apiKeySecretRef.current?.key === key && apiKeySecretRef.current.companyId === companyId && apiKeySecretRef.current.envKey === envKey) return true;
     try {
       if (managedProvider) {
-        await aiConnectionsApi.create(companyId, { provider: managedProvider, method: "api_key", name: `My ${CONNECT_SOURCE_NAMES[adapterType] ?? managedProvider} API`, ownership: "personal", apiKey: key, agentIds: [], allAgents: true });
+        await aiConnectionsApi.create(companyId, { provider: managedProvider, method: "api_key", name: `My ${selectedSourceId === "zai" ? "Z.AI" : (CONNECT_SOURCE_NAMES[adapterType] ?? managedProvider)} API`, ownership: "personal", apiKey: key, agentIds: [], allAgents: true });
         apiKeySecretRef.current = { key, companyId, envKey, aiConnection: { provider: managedProvider, method: "api_key", mode: "responsible_user" } };
         return true;
       }
@@ -1830,7 +1857,7 @@ function OnboardingWizardInner({
           : adapterType === "cursor"
             ? model || DEFAULT_CURSOR_LOCAL_MODEL
             : adapterType === "opencode_local"
-              ? model || DEFAULT_OPENCODE_LOCAL_MODEL
+              ? model || (selectedSourceId === "zai" ? "zai/glm-5" : DEFAULT_OPENCODE_LOCAL_MODEL)
               : model,
       command,
       args,
@@ -1874,7 +1901,7 @@ function OnboardingWizardInner({
         typeof config.env === "object" && config.env !== null && !Array.isArray(config.env)
           ? { ...(config.env as Record<string, unknown>) }
           : {};
-      env[apiKeyEnvKeyFor(adapterType)] = selectedApiKey?.binding ?? apiKeySecretRef.current?.binding;
+      env[apiKeyEnvKeyFor(adapterType, selectedSourceId, typeof config.model === "string" ? config.model : model)] = selectedApiKey?.binding ?? apiKeySecretRef.current?.binding;
       config.env = env;
     }
     if (credentialMode === "subscription" && savedSubscription?.binding) {
@@ -2065,6 +2092,7 @@ function OnboardingWizardInner({
         const discoveredModels = adapterModels ?? [];
         if (
           !selectedModelId.startsWith("openrouter/") &&
+          !selectedModelId.startsWith("zai/") &&
           !discoveredModels.some((entry) => entry.id === selectedModelId)
         ) {
           setError(
@@ -2677,16 +2705,22 @@ function OnboardingWizardInner({
                         question, and answering it is what opens the card. */}
                     <ModelSourceTiles
                       label="Model source"
-                      sources={recommendedAdapters.map((opt) => ({
-                        id: opt.type,
-                        label: CONNECT_SOURCE_NAMES[opt.type] ?? opt.label,
-                        icon: <ModelSourceMark type={opt.type} Fallback={opt.icon} />,
-                      }))}
+                      sources={[
+                        ...recommendedAdapters.map((opt) => ({
+                          id: opt.type,
+                          label: CONNECT_SOURCE_NAMES[opt.type] ?? opt.label,
+                          icon: <ModelSourceMark type={opt.type} Fallback={opt.icon} />,
+                        })),
+                        {
+                          id: "zai",
+                          label: "Z.AI",
+                          icon: <ModelSourceMark type="zai" Fallback={Bot} />,
+                        },
+                      ]}
                       mode={credentialMode}
                       selectedId={
-                        sourcePicked &&
-                        recommendedAdapters.some((opt) => opt.type === adapterType)
-                          ? adapterType
+                        sourcePicked
+                          ? selectedSourceId
                           : null
                       }
                       collapsed={connectCollapsed}
@@ -2695,9 +2729,15 @@ function OnboardingWizardInner({
                         if (connectPhase !== "idle") return;
                         autoConnectStartedRef.current = false;
                         setSourcePicked(true);
-                        setAdapterType(id);
-                        if (id === "opencode_local") setModel("openrouter/auto");
-                        else if (id !== "codex_local") setModel("");
+                        setSelectedSourceId(id);
+                        if (id === "zai") {
+                          setAdapterType("opencode_local");
+                          setModel("zai/glm-5");
+                        } else {
+                          setAdapterType(id);
+                          if (id === "opencode_local") setModel("openrouter/auto");
+                          else if (id !== "codex_local") setModel("");
+                        }
                         setConnectPhase("collapsing");
                       }}
                     />
@@ -2776,11 +2816,11 @@ function OnboardingWizardInner({
                     ) : credentialMode === "api" ? (
                       <OnboardingLoginCard
                         instruction={savedKeys.options.length ? "Choose a saved API key or enter a new one" : `Provide your ${
-                          CONNECT_SOURCE_NAMES[adapterType] ?? adapterType
+                          selectedSourceId === "zai" ? "Z.AI" : (CONNECT_SOURCE_NAMES[adapterType] ?? adapterType)
                         } API key to connect`}
                       >
                         <SavedProviderKeySelect {...savedKeys} disabled={loading || adapterEnvLoading} value={selectedApiKey?.id ?? ""} onChange={(id) => {
-                          setSelectedSavedKey(createdCompanyId ? { companyId: createdCompanyId, envKey: apiKeyEnvKeyFor(adapterType), id } : null);
+                          setSelectedSavedKey(createdCompanyId ? { companyId: createdCompanyId, envKey: apiKeyEnvKeyFor(adapterType, selectedSourceId, model), id } : null);
                           setApiKey("");
                         }} />
                         {!selectedApiKey && <OnboardingCardField
@@ -2793,7 +2833,7 @@ function OnboardingWizardInner({
                           autoFocus
                           value={apiKey}
                           onChange={(value) => {
-                            setSelectedSavedKey(createdCompanyId ? { companyId: createdCompanyId, envKey: apiKeyEnvKeyFor(adapterType), id: "" } : null);
+                            setSelectedSavedKey(createdCompanyId ? { companyId: createdCompanyId, envKey: apiKeyEnvKeyFor(adapterType, selectedSourceId, model), id: "" } : null);
                             setApiKey(value);
                           }}
                           onSubmit={() => handleConnectStepPrimary()}

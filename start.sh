@@ -50,6 +50,18 @@ if ! grep -q "^OPENROUTER_API_KEY=" "$ENV_FILE" 2>/dev/null; then
   echo "==> Added OPENROUTER_API_KEY to $ENV_FILE"
 fi
 
+# Ensure ZAI_API_KEY exists in .env
+if ! grep -q "^ZAI_API_KEY=" "$ENV_FILE" 2>/dev/null; then
+  echo "ZAI_API_KEY=" >> "$ENV_FILE"
+  echo "==> Added ZAI_API_KEY to $ENV_FILE"
+fi
+
+# Ensure ZAI_BASE_URL exists in .env
+if ! grep -q "^ZAI_BASE_URL=" "$ENV_FILE" 2>/dev/null; then
+  echo "ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4" >> "$ENV_FILE"
+  echo "==> Added ZAI_BASE_URL to $ENV_FILE"
+fi
+
 # Ensure PAPERCLIP_PUBLIC_URL exists in .env
 if ! grep -q "^PAPERCLIP_PUBLIC_URL=" "$ENV_FILE" 2>/dev/null; then
   echo "PAPERCLIP_PUBLIC_URL=https://akira.tail0ddb51.ts.net:3100" >> "$ENV_FILE"

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { asBoolean } from "@paperclipai/adapter-utils/server-utils";
+import { fetchZaiModelsCached, DEFAULT_ZAI_BASE_URL } from "./zai.js";
 
 type PreparedOpenCodeRuntimeConfig = {
   env: Record<string, string>;
@@ -176,6 +177,33 @@ export async function prepareOpenCodeRuntimeConfig(input: {
     );
   }
 
+  // Register built-in Z.AI provider if targeted by model or configured via env
+  const configuredModel = parseConfiguredModelRef(input.config.model);
+  if (!nextProvider.zai && (configuredModel?.provider === "zai" || resolveEnv("ZAI_API_KEY"))) {
+    const zaiBaseUrl = (resolveEnv("ZAI_BASE_URL") ?? DEFAULT_ZAI_BASE_URL).trim();
+    const zaiApiKey = resolveEnv("ZAI_API_KEY");
+    const fetchedModels = await fetchZaiModelsCached(zaiBaseUrl, zaiApiKey);
+    const zaiModelsMap: Record<string, Record<string, unknown>> = {};
+    for (const m of fetchedModels) {
+      zaiModelsMap[m] = { name: m };
+    }
+    nextProvider = {
+      ...nextProvider,
+      zai: {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Z.AI",
+        options: {
+          baseURL: zaiBaseUrl,
+          apiKey: zaiApiKey || "{env:ZAI_API_KEY}",
+        },
+        models: zaiModelsMap,
+      },
+    };
+    notes.push(
+      `Configured built-in Z.AI provider (${zaiBaseUrl}) with ${fetchedModels.length} model(s) in runtime OpenCode config.`,
+    );
+  }
+
   // Register the configured model on its provider's models map. OpenCode resolves
   // `--model provider/model` only when the model id exists in that map, so ids the
   // models.dev catalog does not carry — OpenRouter routing variants such as
@@ -184,7 +212,6 @@ export async function prepareOpenCodeRuntimeConfig(input: {
   // An empty entry deep-merges with catalog metadata, so this is a no-op for models
   // the catalog already knows, and we never clobber an explicit definition from the
   // user config or PAPERCLIP_OPENCODE_PROVIDERS.
-  const configuredModel = parseConfiguredModelRef(input.config.model);
   if (configuredModel) {
     const providerEntry = isPlainObject(nextProvider[configuredModel.provider])
       ? { ...(nextProvider[configuredModel.provider] as Record<string, unknown>) }
@@ -220,6 +247,10 @@ export async function prepareOpenCodeRuntimeConfig(input: {
   if (smallModel) {
     nextConfig.small_model = smallModel;
     notes.push(`Pinned OpenCode small_model to ${smallModel}.`);
+  } else if (configuredModel?.provider === "zai") {
+    const small = `zai/${configuredModel.model || "glm-5"}`;
+    nextConfig.small_model = small;
+    notes.push(`Defaulted OpenCode small_model to ${small} for Z.AI.`);
   }
   await fs.writeFile(runtimeConfigPath, `${JSON.stringify(nextConfig, null, 2)}\n`, "utf8");
 

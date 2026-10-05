@@ -309,6 +309,44 @@ describe("prepareOpenCodeRuntimeConfig", () => {
     await prepared.cleanup();
   });
 
+  it("injects built-in Z.AI provider and defaults small_model when zai model is configured", async () => {
+    const configHome = await makeConfigHome();
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: { XDG_CONFIG_HOME: configHome, ZAI_API_KEY: "test-zai-key" },
+      config: { model: "zai/glm-5" },
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"), "utf8"),
+    ) as { provider?: { zai?: { options: { baseURL: string; apiKey: string }; models: Record<string, unknown> } }; small_model?: string };
+
+    expect(runtimeConfig.provider?.zai).toBeDefined();
+    expect(runtimeConfig.provider?.zai?.options.baseURL).toBe("https://api.z.ai/api/coding/paas/v4");
+    expect(runtimeConfig.provider?.zai?.options.apiKey).toBe("test-zai-key");
+    expect(runtimeConfig.provider?.zai?.models["glm-5"]).toBeDefined();
+    expect(runtimeConfig.small_model).toBe("zai/glm-5");
+    await prepared.cleanup();
+  });
+
+  it("respects custom ZAI_BASE_URL when injecting zai provider", async () => {
+    const configHome = await makeConfigHome();
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: {
+        XDG_CONFIG_HOME: configHome,
+        ZAI_API_KEY: "test-zai-key",
+        ZAI_BASE_URL: "https://custom.z.ai/v4",
+      },
+      config: { model: "zai/glm-5.3-flash" },
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"), "utf8"),
+    ) as { provider?: { zai?: { options: { baseURL: string } } } };
+
+    expect(runtimeConfig.provider?.zai?.options.baseURL).toBe("https://custom.z.ai/v4");
+    await prepared.cleanup();
+  });
+
   it("respects explicit opt-out", async () => {
     const configHome = await makeConfigHome();
     const prepared = await prepareOpenCodeRuntimeConfig({

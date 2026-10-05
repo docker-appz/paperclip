@@ -107,7 +107,11 @@ export async function ensureRemoteOpenCodeModelConfiguredAndAvailable(input: {
   // remote availability probe; we still enforce the provider/model format above.
   // Mirrors the local ensureOpenCodeModelConfiguredAndAvailable bypass. Prefer the
   // explicit run env, then the process env.
-  if (isTruthyEnvFlag(input.env.OPENCODE_ALLOW_ALL_MODELS ?? process.env.OPENCODE_ALLOW_ALL_MODELS)) {
+  if (
+    isTruthyEnvFlag(input.env.OPENCODE_ALLOW_ALL_MODELS ?? process.env.OPENCODE_ALLOW_ALL_MODELS) ||
+    model.startsWith("openrouter/") ||
+    model.startsWith("zai/")
+  ) {
     return;
   }
 

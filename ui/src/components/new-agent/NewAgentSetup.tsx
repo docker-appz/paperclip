@@ -940,6 +940,8 @@ function Setup({
                                     <option key={key} value={key}>
                                       {key === "openrouter"
                                         ? "OpenRouter"
+                                        : key === "zai"
+                                          ? "Z.AI"
                                         : key === "openai"
                                           ? "OpenAI"
                                           : key === "anthropic"

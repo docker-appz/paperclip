@@ -125,6 +125,7 @@ export function providerDisplayName(provider: string): string {
     aws_bedrock: "AWS Bedrock",
     openai: "OpenAI",
     openrouter: "OpenRouter",
+    zai: "Z.AI",
     chatgpt: "ChatGPT",
     google: "Google",
     cursor: "Cursor",

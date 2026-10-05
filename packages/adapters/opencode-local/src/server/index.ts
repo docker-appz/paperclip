@@ -71,3 +71,9 @@ export {
   resetOpenCodeModelsCacheForTests,
 } from "./models.js";
 export { parseOpenCodeJsonl, isOpenCodeUnknownSessionError } from "./parse.js";
+export {
+  DEFAULT_ZAI_MODELS,
+  DEFAULT_ZAI_BASE_URL,
+  fetchZaiModels,
+  fetchZaiModelsCached,
+} from "./zai.js";

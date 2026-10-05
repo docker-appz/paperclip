@@ -44,6 +44,24 @@ if ! grep -q "^POSTGRES_PORT=" "$ENV_FILE" 2>/dev/null; then
   echo "==> Added POSTGRES_PORT=5434 to $ENV_FILE"
 fi
 
+# Ensure OPENROUTER_API_KEY exists in .env
+if ! grep -q "^OPENROUTER_API_KEY=" "$ENV_FILE" 2>/dev/null; then
+  echo "OPENROUTER_API_KEY=sk-or-v1-..." >> "$ENV_FILE"
+  echo "==> Added OPENROUTER_API_KEY to $ENV_FILE"
+fi
+
+# Ensure PAPERCLIP_PUBLIC_URL exists in .env
+if ! grep -q "^PAPERCLIP_PUBLIC_URL=" "$ENV_FILE" 2>/dev/null; then
+  echo "PAPERCLIP_PUBLIC_URL=https://akira.tail0ddb51.ts.net:3100" >> "$ENV_FILE"
+  echo "==> Added PAPERCLIP_PUBLIC_URL to $ENV_FILE"
+fi
+
+# Ensure PAPERCLIP_ALLOWED_HOSTNAMES exists in .env
+if ! grep -q "^PAPERCLIP_ALLOWED_HOSTNAMES=" "$ENV_FILE" 2>/dev/null; then
+  echo "PAPERCLIP_ALLOWED_HOSTNAMES=akira.tail0ddb51.ts.net" >> "$ENV_FILE"
+  echo "==> Added PAPERCLIP_ALLOWED_HOSTNAMES to $ENV_FILE"
+fi
+
 # Update localhost:5432 to localhost:5434 in DATABASE_URL if present from .env.example
 if grep -q "^DATABASE_URL=postgres://paperclip:paperclip@localhost:5432/paperclip" "$ENV_FILE" 2>/dev/null; then
   awk 'BEGIN{FS=OFS="="} /^DATABASE_URL=/{gsub("localhost:5432", "localhost:5434")} {print}' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"

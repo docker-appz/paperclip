@@ -44,6 +44,7 @@ services:
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       ZAI_API_KEY: "${ZAI_API_KEY:-}"
       ZAI_BASE_URL: "${ZAI_BASE_URL:-https://api.z.ai/api/coding/paas/v4}"
+      GITHUB_ACCESS_TOKEN: "${GITHUB_ACCESS_TOKEN:-}"
     volumes:
       - paperclip-data:/paperclip
     depends_on:

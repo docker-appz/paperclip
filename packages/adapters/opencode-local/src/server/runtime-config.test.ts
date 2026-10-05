@@ -358,4 +358,194 @@ describe("prepareOpenCodeRuntimeConfig", () => {
     expect(prepared.notes).toEqual([]);
     await prepared.cleanup();
   });
+
+  it("mounts runtime MCP servers as remote OpenCode MCP entries with bearer auth", async () => {
+    const configHome = await makeConfigHome({ permission: { read: "allow" } });
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: { XDG_CONFIG_HOME: configHome },
+      config: {},
+      runtimeMcpServers: [
+        {
+          name: "paperclip-assigned",
+          url: "https://paperclip.example.test/mcp/gateways/gw_abc",
+          token: "pcgw_token_one",
+        },
+        {
+          name: "Paperclip projects",
+          url: "https://paperclip.example.test/api/mcp/project-tools",
+          token: "pcgw_token_two",
+        },
+      ],
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(
+        path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"),
+        "utf8",
+      ),
+    ) as { mcp?: Record<string, Record<string, unknown>> };
+    expect(runtimeConfig.mcp?.["paperclip-assigned"]).toEqual({
+      type: "remote",
+      url: "https://paperclip.example.test/mcp/gateways/gw_abc",
+      headers: { Authorization: "Bearer pcgw_token_one" },
+      enabled: true,
+    });
+    expect(runtimeConfig.mcp?.["paperclip-projects"]).toEqual({
+      type: "remote",
+      url: "https://paperclip.example.test/api/mcp/project-tools",
+      headers: { Authorization: "Bearer pcgw_token_two" },
+      enabled: true,
+    });
+    expect(
+      prepared.notes.some((note) => note.includes("2 Paperclip runtime MCP server(s)")),
+    ).toBe(true);
+    await prepared.cleanup();
+  });
+
+  it("rebases runtime MCP URLs onto the loopback listener when the exported listen port matches", async () => {
+    const configHome = await makeConfigHome();
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: {
+        XDG_CONFIG_HOME: configHome,
+        PAPERCLIP_LISTEN_HOST: "0.0.0.0",
+        PAPERCLIP_LISTEN_PORT: "3100",
+      },
+      config: {},
+      runtimeMcpServers: [
+        {
+          name: "paperclip-assigned",
+          url: "https://akira.example.ts.net:3100/mcp/gateways/gw_abc",
+          token: "pcgw_token_one",
+        },
+      ],
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(
+        path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"),
+        "utf8",
+      ),
+    ) as { mcp?: Record<string, { url?: string }> };
+    expect(runtimeConfig.mcp?.["paperclip-assigned"]?.url).toBe(
+      "http://127.0.0.1:3100/mcp/gateways/gw_abc",
+    );
+    await prepared.cleanup();
+  });
+
+  it("keeps runtime MCP URLs untouched when the listen port does not match", async () => {
+    const configHome = await makeConfigHome();
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: {
+        XDG_CONFIG_HOME: configHome,
+        PAPERCLIP_LISTEN_HOST: "0.0.0.0",
+        PAPERCLIP_LISTEN_PORT: "9999",
+      },
+      config: {},
+      runtimeMcpServers: [
+        {
+          name: "paperclip-assigned",
+          url: "https://paperclip.example.test:3100/mcp/gateways/gw_abc",
+          token: "pcgw_token_one",
+        },
+      ],
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(
+        path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"),
+        "utf8",
+      ),
+    ) as { mcp?: Record<string, { url?: string }> };
+    expect(runtimeConfig.mcp?.["paperclip-assigned"]?.url).toBe(
+      "https://paperclip.example.test:3100/mcp/gateways/gw_abc",
+    );
+    await prepared.cleanup();
+  });
+
+  it("prefers PAPERCLIP_OPENCODE_MCP_API_BASE over the loopback listener rebase", async () => {
+    const configHome = await makeConfigHome();
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: {
+        XDG_CONFIG_HOME: configHome,
+        PAPERCLIP_LISTEN_HOST: "0.0.0.0",
+        PAPERCLIP_LISTEN_PORT: "3100",
+        PAPERCLIP_OPENCODE_MCP_API_BASE: "http://bridge.local:8080",
+      },
+      config: {},
+      runtimeMcpServers: [
+        {
+          name: "paperclip-assigned",
+          url: "https://akira.example.ts.net:3100/mcp/gateways/gw_abc",
+          token: "pcgw_token_one",
+        },
+      ],
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(
+        path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"),
+        "utf8",
+      ),
+    ) as { mcp?: Record<string, { url?: string }> };
+    expect(runtimeConfig.mcp?.["paperclip-assigned"]?.url).toBe(
+      "http://bridge.local:8080/mcp/gateways/gw_abc",
+    );
+    await prepared.cleanup();
+  });
+
+  it("does not clobber a user-defined MCP entry and suffixes the managed name instead", async () => {
+    const configHome = await makeConfigHome({
+      permission: { read: "allow" },
+      mcp: {
+        "paperclip-assigned": { type: "local", command: ["my-mcp"] },
+      },
+    });
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: { XDG_CONFIG_HOME: configHome },
+      config: {},
+      runtimeMcpServers: [
+        {
+          name: "paperclip-assigned",
+          url: "https://paperclip.example.test/mcp/gateways/gw_abc",
+          token: "pcgw_token_one",
+        },
+      ],
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(
+        path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"),
+        "utf8",
+      ),
+    ) as { mcp?: Record<string, Record<string, unknown>> };
+    expect(runtimeConfig.mcp?.["paperclip-assigned"]).toEqual({
+      type: "local",
+      command: ["my-mcp"],
+    });
+    expect(runtimeConfig.mcp?.["paperclip-assigned-2"]).toMatchObject({
+      type: "remote",
+      headers: { Authorization: "Bearer pcgw_token_one" },
+    });
+    await prepared.cleanup();
+  });
+
+  it("skips runtime MCP servers without a usable URL or token", async () => {
+    const configHome = await makeConfigHome();
+    const prepared = await prepareOpenCodeRuntimeConfig({
+      env: { XDG_CONFIG_HOME: configHome },
+      config: {},
+      runtimeMcpServers: [
+        { name: "broken", url: "https://paperclip.example.test/mcp", token: "   " },
+      ],
+    });
+    cleanupPaths.add(prepared.env.XDG_CONFIG_HOME);
+    const runtimeConfig = JSON.parse(
+      await fs.readFile(
+        path.join(prepared.env.XDG_CONFIG_HOME, "opencode", "opencode.json"),
+        "utf8",
+      ),
+    ) as { mcp?: Record<string, unknown> };
+    expect(runtimeConfig.mcp).toBeUndefined();
+    await prepared.cleanup();
+  });
 });

@@ -64,8 +64,14 @@ fi
 
 # Ensure PAPERCLIP_PUBLIC_URL exists in .env
 if ! grep -q "^PAPERCLIP_PUBLIC_URL=" "$ENV_FILE" 2>/dev/null; then
-  echo "PAPERCLIP_PUBLIC_URL=https://akira.tail0ddb51.ts.net:3100" >> "$ENV_FILE"
+  echo "PAPERCLIP_PUBLIC_URL=https://akira.tail0ddb51.ts.net/paperclip" >> "$ENV_FILE"
   echo "==> Added PAPERCLIP_PUBLIC_URL to $ENV_FILE"
+fi
+
+# Update legacy port 3100 in PAPERCLIP_PUBLIC_URL if present when running under tailscale serve path
+if grep -q "^PAPERCLIP_PUBLIC_URL=https://akira.tail0ddb51.ts.net:3100" "$ENV_FILE" 2>/dev/null; then
+  awk 'BEGIN{FS=OFS="="} /^PAPERCLIP_PUBLIC_URL=/{gsub("https://akira.tail0ddb51.ts.net:3100", "https://akira.tail0ddb51.ts.net/paperclip")} {print}' "$ENV_FILE" > "$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+  echo "==> Updated PAPERCLIP_PUBLIC_URL from :3100 to /paperclip in $ENV_FILE"
 fi
 
 # Ensure PAPERCLIP_ALLOWED_HOSTNAMES exists in .env

@@ -3,40 +3,59 @@ import path from "node:path";
 import { applyUiBranding } from "./ui-branding.js";
 
 export function resolveBasePath(reqOrPath?: any): string {
+  const configuredEnvBasePath = process.env.PAPERCLIP_BASE_PATH?.trim().replace(/\/+$/, "");
+  const publicUrlBasePath = (() => {
+    if (process.env.PAPERCLIP_PUBLIC_URL) {
+      try {
+        const u = new URL(process.env.PAPERCLIP_PUBLIC_URL);
+        if (u.pathname && u.pathname !== "/") {
+          return u.pathname.replace(/\/+$/, "");
+        }
+      } catch {}
+    }
+    return null;
+  })();
+  const candidatePaths = [
+    ...(configuredEnvBasePath ? [configuredEnvBasePath] : []),
+    ...(publicUrlBasePath ? [publicUrlBasePath] : []),
+    "/paperclip",
+  ];
+
   if (typeof reqOrPath === "object" && reqOrPath !== null) {
     const prefix = reqOrPath.headers?.["x-forwarded-prefix"];
     if (typeof prefix === "string" && prefix.trim()) {
       return prefix.trim().replace(/\/+$/, "");
     }
     const originalUrl = reqOrPath.originalUrl || reqOrPath.url || "";
-    if (originalUrl === "/paperclip" || originalUrl.startsWith("/paperclip/") || originalUrl.startsWith("/paperclip?")) {
-      return "/paperclip";
+    for (const candidate of candidatePaths) {
+      if (candidate && (originalUrl === candidate || originalUrl.startsWith(`${candidate}/`) || originalUrl.startsWith(`${candidate}?`))) {
+        return candidate;
+      }
     }
     const referer = reqOrPath.headers?.["referer"];
     if (typeof referer === "string") {
       try {
         const u = new URL(referer);
-        if (u.pathname === "/paperclip" || u.pathname.startsWith("/paperclip/")) {
-          return "/paperclip";
+        for (const candidate of candidatePaths) {
+          if (candidate && (u.pathname === candidate || u.pathname.startsWith(`${candidate}/`))) {
+            return candidate;
+          }
         }
       } catch {}
     }
   } else if (typeof reqOrPath === "string") {
-    if (reqOrPath === "/paperclip" || reqOrPath.startsWith("/paperclip/") || reqOrPath.startsWith("/paperclip?")) {
-      return "/paperclip";
+    for (const candidate of candidatePaths) {
+      if (candidate && (reqOrPath === candidate || reqOrPath.startsWith(`${candidate}/`) || reqOrPath.startsWith(`${candidate}?`))) {
+        return candidate;
+      }
     }
   }
 
-  if (process.env.PAPERCLIP_BASE_PATH) {
-    return process.env.PAPERCLIP_BASE_PATH.replace(/\/+$/, "");
+  if (configuredEnvBasePath) {
+    return configuredEnvBasePath;
   }
-  if (process.env.PAPERCLIP_PUBLIC_URL) {
-    try {
-      const u = new URL(process.env.PAPERCLIP_PUBLIC_URL);
-      if (u.pathname && u.pathname !== "/") {
-        return u.pathname.replace(/\/+$/, "");
-      }
-    } catch {}
+  if (publicUrlBasePath) {
+    return publicUrlBasePath;
   }
   return "";
 }

@@ -52,6 +52,20 @@ describe("oauthCallbackUrlForBrowser", () => {
       "https://paperclip.example.test/api/tools/oauth/callback",
     );
   });
+
+  it("preserves subpath when present in origin or __PAPERCLIP_BASE_PATH__", () => {
+    expect(oauthCallbackUrlForBrowser("https://akira.tail0ddb51.ts.net/paperclip")).toBe(
+      "https://akira.tail0ddb51.ts.net/paperclip/api/tools/oauth/callback",
+    );
+    (window as any).__PAPERCLIP_BASE_PATH__ = "/paperclip";
+    try {
+      expect(oauthCallbackUrlForBrowser("https://akira.tail0ddb51.ts.net")).toBe(
+        "https://akira.tail0ddb51.ts.net/paperclip/api/tools/oauth/callback",
+      );
+    } finally {
+      delete (window as any).__PAPERCLIP_BASE_PATH__;
+    }
+  });
 });
 
 describe("defaultGenericMcpName", () => {

@@ -62,4 +62,20 @@ describe("static SPA fallback HTML", () => {
     expect(res.text).toContain("/assets/index-new.js");
     expect(res.text).not.toContain("/assets/index-old.js");
   });
+
+  it("resolves base path correctly from env, headers, and request URLs", async () => {
+    const { resolveBasePath } = await import("../static-index-html.js");
+    expect(resolveBasePath()).toBe("");
+    expect(resolveBasePath({ headers: { "x-forwarded-prefix": "/paperclip" } })).toBe("/paperclip");
+    expect(resolveBasePath({ originalUrl: "/paperclip/api/tools/oauth/callback" })).toBe("/paperclip");
+    expect(resolveBasePath({ headers: { referer: "https://akira.tail0ddb51.ts.net/paperclip/FEV/apps/connect" } })).toBe("/paperclip");
+
+    vi.stubEnv("PAPERCLIP_BASE_PATH", "/paperclip");
+    expect(resolveBasePath()).toBe("/paperclip");
+    expect(resolveBasePath({ originalUrl: "/api/tools/oauth/callback" })).toBe("/paperclip");
+
+    vi.stubEnv("PAPERCLIP_BASE_PATH", undefined);
+    vi.stubEnv("PAPERCLIP_PUBLIC_URL", "https://akira.tail0ddb51.ts.net/paperclip");
+    expect(resolveBasePath()).toBe("/paperclip");
+  });
 });

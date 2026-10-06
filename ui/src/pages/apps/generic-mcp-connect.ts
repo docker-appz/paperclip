@@ -43,7 +43,20 @@ export function endpointHost(url: string): string | null {
  * HTTP OAuth, so the setup form must advertise that same canonical spelling.
  */
 export function oauthCallbackUrlForBrowser(origin: string = window.location.origin): string {
-  const callbackUrl = new URL("/api/tools/oauth/callback", origin);
+  const basePath = typeof window !== "undefined" && (window as any).__PAPERCLIP_BASE_PATH__
+    ? (window as any).__PAPERCLIP_BASE_PATH__
+    : "";
+  let baseOrigin = origin;
+  let explicitPath = "";
+  try {
+    const parsed = new URL(origin);
+    baseOrigin = parsed.origin;
+    if (parsed.pathname && parsed.pathname !== "/") {
+      explicitPath = parsed.pathname.replace(/\/+$/, "");
+    }
+  } catch {}
+  const prefix = explicitPath || (basePath ? (basePath.startsWith("/") ? basePath : `/${basePath}`).replace(/\/+$/, "") : "");
+  const callbackUrl = new URL(`${prefix}/api/tools/oauth/callback`, baseOrigin);
   const hostname = callbackUrl.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
     callbackUrl.protocol === "http:"

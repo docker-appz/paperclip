@@ -79,6 +79,7 @@ import {
   oauthClientIdMetadataDocument,
 } from "../services/tool-access.js";
 import { isLoopbackHost } from "../url-utils.js";
+import { resolveBasePath } from "../static-index-html.js";
 import { trustedBoardMutationOrigin } from "../middleware/board-mutation-guard.js";
 import { connectionIntentService } from "../services/connection-intents.js";
 import { redactRemoteUrlCredential } from "../services/remote-url-credentials.js";
@@ -230,10 +231,11 @@ function normalizeCloudConnectorEnrollmentReturnTo(returnTo?: string | null): st
   }
 }
 
-export function cloudConnectorEnrollmentOutcomeHtml(issuePrefix: string, returnTo: string, issueId?: string): string {
+export function cloudConnectorEnrollmentOutcomeHtml(issuePrefix: string, returnTo: string, issueId?: string, basePath: string = ""): string {
+  const prefix = basePath ? (basePath.startsWith("/") ? basePath : `/${basePath}`).replace(/\/+$/, "") : "";
   const fallbackPath = issueId
-    ? `/${encodeURIComponent(issuePrefix)}/issues/${encodeURIComponent(issueId)}`
-    : cloudConnectorEnrollmentReturnPath(issuePrefix, returnTo);
+    ? `${prefix}/${encodeURIComponent(issuePrefix)}/issues/${encodeURIComponent(issueId)}`
+    : `${prefix}${cloudConnectorEnrollmentReturnPath(issuePrefix, returnTo)}`;
   const fallback = JSON.stringify(fallbackPath).replaceAll("<", "\\u003c");
   // This document is served only after server-verified enrollment. The parent
   // independently re-reads enrollment status; browser messages grant no access.
@@ -345,6 +347,30 @@ export function toolAccessRoutes(
     }
   }
 
+  function configuredPublicPath(): string {
+    const raw = (
+      process.env.PAPERCLIP_AUTH_PUBLIC_BASE_URL?.trim()
+      || process.env.BETTER_AUTH_URL?.trim()
+      || process.env.BETTER_AUTH_BASE_URL?.trim()
+      || options.authPublicBaseUrl?.trim()
+      || process.env.PAPERCLIP_PUBLIC_URL?.trim()
+      || process.env.PAPERCLIP_MANAGED_RUNTIME_PUBLIC_URL?.trim()
+    );
+    if (!raw) return "";
+    try {
+      const u = new URL(raw);
+      return u.pathname && u.pathname !== "/" ? u.pathname.replace(/\/+$/, "") : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function resolveEffectiveBasePath(req?: Request): string {
+    const resolved = resolveBasePath(req) || configuredPublicPath();
+    if (!resolved) return "";
+    return (resolved.startsWith("/") ? resolved : `/${resolved}`).replace(/\/+$/, "");
+  }
+
   function requestLoopbackBaseUrl(req: Request) {
     const host = req.get("host")?.trim();
     if (!host) return null;
@@ -443,7 +469,9 @@ export function toolAccessRoutes(
         { code: "oauth_redirect_origin_unsupported" },
       );
     }
-    return new URL("/api/tools/oauth/callback", baseUrl).toString();
+    const origin = new URL(baseUrl).origin;
+    const prefix = resolveEffectiveBasePath(req);
+    return `${origin}${prefix}/api/tools/oauth/callback`;
   }
 
   function oauthBrowserOrigin(req: Request) {
@@ -462,6 +490,7 @@ export function toolAccessRoutes(
   async function oauthAppPath(
     companyId: string,
     connectionId: string,
+    req?: Request,
   ) {
     const [company] = await db
       .select({ issuePrefix: companies.issuePrefix })
@@ -469,7 +498,8 @@ export function toolAccessRoutes(
       .where(eq(companies.id, companyId))
       .limit(1);
     if (!company) throw new Error("OAuth callback connection belongs to a missing company");
-    return `/${company.issuePrefix}/apps/${connectionId}/permissions`;
+    const prefix = resolveEffectiveBasePath(req);
+    return `${prefix}/${company.issuePrefix}/apps/${connectionId}/permissions`;
   }
 
 function connectorEnrollmentPrincipal(req: Request): string {
@@ -487,8 +517,9 @@ function connectorEnrollmentPrincipal(req: Request): string {
     outcome: "failed" | "denied",
     code?: string | null,
     providerRecovery?: { installationUrl?: unknown; managementUrl?: unknown },
+    req?: Request,
   ) {
-    const detailPermissionsPath = await oauthAppPath(connection.companyId, connection.id);
+    const detailPermissionsPath = await oauthAppPath(connection.companyId, connection.id, req);
     const params = new URLSearchParams({ oauth: outcome });
     if (code) params.set("code", code);
     const addGitHubRecoveryUrls = (target: URLSearchParams) => {
@@ -880,7 +911,9 @@ function connectorEnrollmentPrincipal(req: Request): string {
    */
   router.get(OAUTH_CLIENT_ID_METADATA_DOCUMENT_PATH.replace(/^\/api/, ""), (_req, res) => {
     const redirectUri = oauthRedirectUri(_req);
-    const clientId = new URL(OAUTH_CLIENT_ID_METADATA_DOCUMENT_PATH, new URL(redirectUri).origin).toString();
+    const origin = new URL(redirectUri).origin;
+    const prefix = resolveEffectiveBasePath(_req);
+    const clientId = `${origin}${prefix}${OAUTH_CLIENT_ID_METADATA_DOCUMENT_PATH}`;
     res.type("application/json").json(oauthClientIdMetadataDocument({ clientId, redirectUri }));
   });
 
@@ -1114,10 +1147,11 @@ function connectorEnrollmentPrincipal(req: Request): string {
           eq(issueThreadInteractions.addresseeUserId, req.actor.userId ?? ""),
           eq(issueThreadInteractions.kind, "connection_intent"),
         )).limit(1) : [];
-      res.type("html").send(cloudConnectorEnrollmentOutcomeHtml(company.issuePrefix, returnTo, interaction?.issueId));
+      res.type("html").send(cloudConnectorEnrollmentOutcomeHtml(company.issuePrefix, returnTo, interaction?.issueId, resolveEffectiveBasePath(req)));
       return;
     }
-    res.redirect(303, cloudConnectorEnrollmentReturnPath(company.issuePrefix, returnTo));
+    const prefix = resolveEffectiveBasePath(req);
+    res.redirect(303, `${prefix}${cloudConnectorEnrollmentReturnPath(company.issuePrefix, returnTo)}`);
   });
 
   const handlePaperclipCloudConnectorCallback = async (req: Request, res: Response) => {
@@ -1193,7 +1227,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
         return;
       }
       if (acceptsHtml) {
-        const permissionsPath = await oauthAppPath(result.connection.companyId, result.connection.id);
+        const permissionsPath = await oauthAppPath(result.connection.companyId, result.connection.id, req);
         res.redirect(303, `${permissionsPath}?success=1`);
         return;
       }
@@ -1229,6 +1263,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
           installationUrl: details?.installationUrl,
           managementUrl: details?.managementUrl,
         },
+        req,
       ));
     }
   };
@@ -1288,7 +1323,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
         return;
       }
       if (acceptsHtml) {
-        const permissionsPath = await oauthAppPath(result.connection.companyId, result.connection.id);
+        const permissionsPath = await oauthAppPath(result.connection.companyId, result.connection.id, req);
         res.redirect(303, `${permissionsPath}?success=1`);
         return;
       }
@@ -1325,7 +1360,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
         });
         return;
       }
-      res.redirect(303, await oauthRecoveryPath(pendingConnection, "failed", callbackCode));
+      res.redirect(303, await oauthRecoveryPath(pendingConnection, "failed", callbackCode, undefined, req));
     }
   });
 
@@ -1358,7 +1393,12 @@ function connectorEnrollmentPrincipal(req: Request): string {
       // State is only peeked above, so the same-origin repeat still owns it.
       res.set("Cache-Control", "no-store");
       res.set("Referrer-Policy", "no-referrer");
-      res.type("html").send(oauthCallbackInterstitialHtml(req.originalUrl));
+      const prefix = resolveEffectiveBasePath(req);
+      let continuePath = req.originalUrl;
+      if (prefix && !continuePath.startsWith(prefix)) {
+        continuePath = `${prefix}${continuePath.startsWith("/") ? "" : "/"}${continuePath}`;
+      }
+      res.type("html").send(oauthCallbackInterstitialHtml(continuePath));
       return;
     }
     let result: Awaited<ReturnType<typeof svc.completeOAuthCallback>>;
@@ -1424,6 +1464,8 @@ function connectorEnrollmentPrincipal(req: Request): string {
         pendingConnection,
         callbackErrorCode === "oauth_authorization_denied" ? "denied" : "failed",
         callbackFailureCode,
+        undefined,
+        req,
       ));
       return;
     }
@@ -1457,7 +1499,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
       return;
     }
     if (acceptsHtml) {
-      const permissionsPath = await oauthAppPath(result.connection.companyId, result.connection.id);
+      const permissionsPath = await oauthAppPath(result.connection.companyId, result.connection.id, req);
       res.redirect(303, `${permissionsPath}?success=1`);
       return;
     }
